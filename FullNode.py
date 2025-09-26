@@ -159,8 +159,31 @@ class FullNode:
 		# Save block to physical memory here. 
 		# Syntax to store block: save_object(new_block,"valid_chain/block{}.block".format(new_block.index))
 		# save_object(NewBlock,"valid_chain/block{}.block".format(NewBlock.index))
-		pass
-
+		self.update_UTXO()
+		valid_txs = self.findValidButUnconfirmedTransactions()
+		if not valid_txs:
+			return
+		last_blk = self.last_block()
+		index = last_blk.index + 1
+		previous_hash = self.computeBlockHash(last_blk)
+		time_stamp = datetime.datetime.now().strftime("%d-%m-%Y (%H:%M:%S)")
+		new_block = Block(index, valid_txs, time_stamp, previous_hash, self.STUDENT_ID, nonce=0)
+		self.proof_of_work(new_block)
+		self.valid_chain.append(new_block)
+		save_object(new_block, "valid_chain/block{}.block".format(new_block.index))
+		# Optionally, update pending UTXO by applying included txs
+		for tx in valid_txs:
+			# remove spent inputs
+			if not tx.get('COINBASE', False):
+				for inp in tx.get('inputs', []):
+					parent_txn_id, output_number, _, _ = inp
+					key = (parent_txn_id, output_number)
+					if key in self.UTXO_Database_Pending:
+						del self.UTXO_Database_Pending[key]
+			# add outputs
+			for out_index, output in enumerate(tx.get('outputs', [])):
+				value, pubkey_hash = output
+				self.UTXO_Database_Pending[(tx['id'], out_index)] = (value, pubkey_hash)
 
 
 	def proof_of_work(self, block):
@@ -169,8 +192,8 @@ class FullNode:
 		Iterates a nonce value,
 		which gives a block hash that satisfies PoW dificulty condition.
 		"""
+		prefix = '0' * self.DIFFICULTY
 		#darab
-		refix = '0' * self.DIFFICULTY
 		# start from current nonce
 		while True:
 			block_hash = self.computeBlockHash(block)
